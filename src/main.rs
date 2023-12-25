@@ -1,6 +1,7 @@
 use std::ops::Deref;
 use std::path::Path;
 
+use structured_logger::{async_json::new_writer, unix_ms, Builder};
 // use completion::get_completions;
 // use references::references;
 use tokio::sync::RwLock;
@@ -31,14 +32,17 @@ impl LanguageServer for Backend {
         let root_dir = Path::new(root_uri.path());
 
         return Ok(InitializeResult {
-            server_info: None,
+            server_info: Some(ServerInfo {
+                name: "thymeleaf_ls".into(),
+                version: Some("0.0.1".into()),
+            }),
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec!["#".to_string(), "[".into()]),
+                    trigger_characters: Some(vec!["th:".into(), "data-th-".to_string()]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                     completion_item: None,
@@ -53,12 +57,14 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
+        log::info!("initialized");
         self.client
-            .log_message(MessageType::INFO, "Obsidian_ls initialized")
+            .log_message(MessageType::INFO, "thymeleaf_ls initialized")
             .await;
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        log::debug!("did_open: {:?}", params);
         // let Some(ref mut vault) = *self.vault.write().await else {
         //     self.client.log_message(MessageType::ERROR, "Vault is not initialized").await;
         //     return;
@@ -73,6 +79,7 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        log::debug!("did_change: {:?}", params);
         // let Some(ref mut vault) = *self.vault.write().await else {
         //     self.client.log_message(MessageType::ERROR, "Vault is not initialized").await;
         //     return;
@@ -143,13 +150,18 @@ impl LanguageServer for Backend {
             CompletionItem::new_simple("hello".into(), "world".into()),
         ]);
 
-        println!("got here");
+        log::debug!("haa? {:?}", params);
         return Ok(Some(completions));
     }
 }
 
 #[tokio::main]
 async fn main() {
+
+    Builder::with_level("TRACE")
+        .with_target_writer("*", new_writer(tokio::io::stderr()))
+        .init();
+
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
