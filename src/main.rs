@@ -42,7 +42,9 @@ impl LanguageServer for Backend {
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec!["th:".into(), "data-th-".to_string()]),
+                    trigger_characters: Some(vec![
+                        ":".to_string(),
+                    ]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                     completion_item: None,
@@ -79,7 +81,8 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        log::debug!("did_change: {:?}", params);
+        // log::debug!("did_change: {:?}", params);
+        //
         // let Some(ref mut vault) = *self.vault.write().await else {
         //     self.client.log_message(MessageType::ERROR, "Vault is not initialized").await;
         //     return;
@@ -150,14 +153,43 @@ impl LanguageServer for Backend {
             CompletionItem::new_simple("hello".into(), "world".into()),
         ]);
 
-        log::debug!("haa? {:?}", params);
-        return Ok(Some(completions));
+        match &params.context {
+            Some(context) => match &context.trigger_character {
+                Some(trigger_character) => match trigger_character.as_str() {
+                    ":" => {
+                        log::debug!("colon {:?}", &params);
+
+                        return Ok(Some(CompletionResponse::Array(vec![
+                            CompletionItem::new_simple("thyme".into(), "leaf".into()),
+                            CompletionItem::new_simple("hello".into(), "world".into()),
+                        ])));
+                    }
+                    "-" => {
+                        log::debug!("hyphen {:?}", &params);
+                        return Ok(Some(CompletionResponse::Array(vec![
+                            CompletionItem::new_simple("hyme".into(), "leaf".into()),
+                            CompletionItem::new_simple("ello".into(), "world".into()),
+                        ])));
+                    }
+                    tc => {
+                        log::debug!("any {:?}", tc);
+                        return Ok(Some(CompletionResponse::Array(vec![
+                            CompletionItem::new_simple("me".into(), "leaf".into()),
+                            CompletionItem::new_simple("lo".into(), "world".into()),
+                        ])));
+                    }
+                },
+                None => {}
+            },
+            None => {}
+        }
+
+        return Ok(None);
     }
 }
 
 #[tokio::main]
 async fn main() {
-
     Builder::with_level("TRACE")
         .with_target_writer("*", new_writer(tokio::io::stderr()))
         .init();
