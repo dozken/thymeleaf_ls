@@ -11,8 +11,12 @@ Language Server Protocol (LSP) implementation for [Thymeleaf](https://www.thymel
 - `cargo build` (or `make build`) — build debug binary at `target/debug/thymeleaf_ls`
 - `cargo watch -x build` (or `make watch`) — rebuild on change (needs `cargo-watch`)
 - `cargo run` — run server (blocks on stdio, expects an LSP client)
+- `make check` — run everything CI runs: `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (mirrors `.github/workflows/ci.yml`)
+- `make install` — `cargo install --path .`; `make link` symlinks the debug build onto `~/.local/bin`
 
 Tests live in `#[cfg(test)] mod tests` blocks inside each `src/*.rs` module, plus end-to-end handler-flow tests in `main.rs` (`mod integration_tests`). Run all with `cargo test`; a single test with `cargo test <name>`.
+
+Dual-licensed MIT OR Apache-2.0 (`LICENSE-MIT` / `LICENSE-APACHE`). Tag-triggered `release.yml` builds cross-platform binaries. Crate metadata (description/license/repo/keywords) lives in `Cargo.toml`; `index.html` is a sample template (excluded from the published crate).
 
 ## Architecture
 

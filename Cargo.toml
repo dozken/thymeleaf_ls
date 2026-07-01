@@ -2,8 +2,16 @@
 name = "thymeleaf_ls"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+rust-version = "1.75"
+description = "A Language Server Protocol (LSP) implementation for Thymeleaf HTML templates."
+authors = ["dozken <dosmukhamed@gmail.com>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/dozken/thymeleaf_ls"
+homepage = "https://github.com/dozken/thymeleaf_ls"
+keywords = ["lsp", "thymeleaf", "language-server", "html", "tree-sitter"]
+categories = ["development-tools", "text-editors"]
+exclude = ["/.github", "/debug.lua", "/index.html"]
 
 [dependencies]
 log = "0.4.20"

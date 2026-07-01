@@ -1,14 +1,38 @@
 <!DOCTYPE html>
-<html lang="en">
+<!--
+  Sample Thymeleaf template for exercising thymeleaf_ls.
+  Open with `make nvim` (or your configured editor) and try:
+    - hover over any th:* attribute        -> documentation
+    - type `th:` inside a tag              -> completion
+    - goto-definition on a th:replace name -> jumps to th:fragment
+    - the `th:txt` below is intentionally  -> diagnostic + quick-fix
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
     <head>
-        <title></title>
+        <title th:text="${page.title}">Static title</title>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link href="css/style.css" rel="stylesheet">
+        <link th:href="@{/css/style.css}" rel="stylesheet">
     </head>
     <body>
+        <!-- Pull in a shared fragment defined below (goto-definition works). -->
+        <header th:replace="~{:: site-header}">placeholder header</header>
 
-        <div></div>
+        <main>
+            <!-- Intentional typo: th:txt is unknown -> warning + quick-fix. -->
+            <h1 th:txt="${page.heading}">Heading</h1>
 
+            <p th:if="${user != null}" th:text="|Welcome, ${user.name}!|">Welcome</p>
+
+            <ul>
+                <li th:each="item : ${items}" th:text="${item.label}">an item</li>
+            </ul>
+
+            <a th:href="@{/users/{id}(id=${user.id})}">Profile</a>
+        </main>
+
+        <!-- Fragment definition referenced by th:replace above. -->
+        <footer th:fragment="site-header">
+            <span th:text="${#dates.format(now, 'yyyy-MM-dd')}">2026-01-01</span>
+        </footer>
     </body>
 </html>
