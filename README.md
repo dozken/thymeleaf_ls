@@ -46,16 +46,20 @@ This is a Language Server Protocol (LSP) implementation for Thymeleaf, a modern 
 
 ## Features
 
-- [ ] **Code Completion:** Get intelligent code completion suggestions for Thymeleaf attributes and expressions as you type.  
+- [x] **Code Completion:** Get intelligent code completion suggestions for Thymeleaf attributes and expressions as you type.
     - [x] Trigger on `:`
-    - [ ] Trigger in element atttribute only e.g. `<div th:_ />`
-- [ ] **Documentation:** Access documentation and tooltips for Thymeleaf attributes and expressions right in your editor.
-- [ ] **Navigation:** Easily navigate through Thymeleaf templates with support for jumping to declarations and references.
+    - [x] Context-aware: attribute names offered in start tags, expression syntaxes offered inside `th:*` values
+    - [x] Filters the Standard Dialect catalog by the partial name being typed
+- [x] **Documentation:** Access documentation and tooltips (hover) for Thymeleaf attributes and expression syntaxes right in your editor.
+- [x] **Navigation:** Jump to fragment definitions (goto-definition) and list fragment references across the workspace.
 - [ ] **Syntax Highlighting:** Enjoy syntax highlighting for Thymeleaf expressions and tags in your IDE or text editor.
-- [ ] **Error Checking:** Receive real-time feedback on syntax errors and other issues in your Thymeleaf templates.
+- [x] **Error Checking:** Real-time diagnostics — flags unknown `th:*` attributes and clearly unbalanced expression brackets.
 
 ## TODO
 
 - [ ] CI/CD
-- [ ] Tests
+- [x] Tests (unit tests via `cargo test`)
+- [ ] Trigger completion in element attributes only, e.g. `<div th:_ />`
+- [ ] UTF-16 position encoding (currently byte offsets; off for multi-byte lines)
+- [ ] Syntax highlighting
 - [ ] Sample of features
