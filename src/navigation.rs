@@ -11,6 +11,7 @@
 
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 
+use crate::fragmentref;
 use crate::vault::Vault;
 
 /// Goto-definition: when the cursor sits inside a `th:insert`/`th:replace`/
@@ -24,13 +25,9 @@ pub fn goto(vault: &Vault, uri: &Url, position: Position) -> Option<Vec<Location
     let name = doc
         .attributes()
         .into_iter()
-        .filter(|a| is_reference_attr(&a.name))
+        .filter(|a| fragmentref::is_reference_attr(&a.name))
         .find(|a| offset >= a.value_range.start && offset <= a.value_range.end)
-        .map(|a| parse_reference_name(&a.value))?;
-
-    if name.is_empty() {
-        return None;
-    }
+        .and_then(|a| fragmentref::reference_name(&a.value).map(str::to_string))?;
 
     let locations: Vec<Location> = vault
         .find_fragment_definitions(&name)
@@ -85,16 +82,14 @@ fn fragment_name_at(vault: &Vault, uri: &Url, position: Position) -> Option<Stri
         if !(on_name || on_value) {
             continue;
         }
-        if is_fragment_attr(&attr.name) {
-            let name = parse_definition_name(&attr.value);
-            if !name.is_empty() {
-                return Some(name);
+        if fragmentref::is_fragment_attr(&attr.name) {
+            if let Some(name) = fragmentref::definition_name(&attr.value) {
+                return Some(name.to_string());
             }
         }
-        if is_reference_attr(&attr.name) {
-            let name = parse_reference_name(&attr.value);
-            if !name.is_empty() {
-                return Some(name);
+        if fragmentref::is_reference_attr(&attr.name) {
+            if let Some(name) = fragmentref::reference_name(&attr.value) {
+                return Some(name.to_string());
             }
         }
     }
@@ -109,10 +104,10 @@ fn reference_locations(vault: &Vault, name: &str) -> Vec<Location> {
     for uri in vault_uris(vault) {
         let Some(doc) = vault.get(&uri) else { continue };
         for attr in doc.attributes() {
-            if !is_reference_attr(&attr.name) {
+            if !fragmentref::is_reference_attr(&attr.name) {
                 continue;
             }
-            if parse_reference_name(&attr.value) != name {
+            if fragmentref::reference_name(&attr.value) != Some(name) {
                 continue;
             }
             let range = Range {
@@ -138,105 +133,9 @@ fn vault_uris(vault: &Vault) -> Vec<Url> {
     vault.uris().cloned().collect()
 }
 
-// === Attribute-name classification ========================================
-
-/// True if `name` denotes a `th:fragment` definition (accepts `data-th-`).
-fn is_fragment_attr(name: &str) -> bool {
-    matches_th_attr(name, "fragment")
-}
-
-/// True if `name` denotes a fragment-reference attribute: `th:insert`,
-/// `th:replace`, or `th:include` (accepts the `data-th-` form).
-fn is_reference_attr(name: &str) -> bool {
-    matches_th_attr(name, "insert")
-        || matches_th_attr(name, "replace")
-        || matches_th_attr(name, "include")
-}
-
-/// Case-insensitively matches an attribute name against `th:<local>` or
-/// `data-th-<local>`.
-fn matches_th_attr(name: &str, local: &str) -> bool {
-    let lower = name.trim().to_ascii_lowercase();
-    lower == format!("th:{local}") || lower == format!("data-th-{local}")
-}
-
-// === Value parsing ========================================================
-
-/// Extracts the fragment name from a `th:fragment` value, dropping any
-/// parameter list, e.g. `"header(title)"` -> `"header"`.
-fn parse_definition_name(value: &str) -> String {
-    let trimmed = value.trim();
-    let name = match trimmed.find('(') {
-        Some(idx) => &trimmed[..idx],
-        None => trimmed,
-    };
-    name.trim().to_string()
-}
-
-/// Extracts the referenced fragment name from a `th:insert`/`th:replace`/
-/// `th:include` value. Handles the forms:
-///   * `~{template :: name}`
-///   * `template :: name`
-///   * `:: name`
-///   * `name` (bare fragment, no template selector)
-///
-/// Strips any trailing argument list (`name(args)`).
-fn parse_reference_name(value: &str) -> String {
-    // Strip an outer `~{ ... }` fragment-expression wrapper if present.
-    let mut s = value.trim();
-    if let Some(rest) = s.strip_prefix("~{") {
-        s = rest.trim_start();
-        s = s.strip_suffix('}').unwrap_or(s);
-    }
-    let s = s.trim();
-
-    // The fragment selector is the segment after `::`; if there's no `::` the
-    // whole thing is the fragment name (bare reference).
-    let selector = match s.rfind("::") {
-        Some(idx) => &s[idx + 2..],
-        None => s,
-    };
-
-    // Drop any argument list: `name(args)` -> `name`. Also drop a trailing `}`
-    // that may remain if the wrapper suffix wasn't cleanly stripped.
-    let selector = selector.trim();
-    let selector = selector.strip_suffix('}').unwrap_or(selector);
-    let name = match selector.find('(') {
-        Some(idx) => &selector[..idx],
-        None => selector,
-    };
-    name.trim().to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_reference_name_wrapped_fragment_expression() {
-        assert_eq!(parse_reference_name("~{tpl :: frag}"), "frag");
-    }
-
-    #[test]
-    fn parse_reference_name_bare_template_selector() {
-        assert_eq!(parse_reference_name("template :: name"), "name");
-    }
-
-    #[test]
-    fn parse_reference_name_selector_only() {
-        assert_eq!(parse_reference_name(":: name"), "name");
-    }
-
-    #[test]
-    fn parse_reference_name_strips_arguments() {
-        assert_eq!(parse_reference_name("~{fragments :: header('Home')}"), "header");
-    }
-
-    #[test]
-    fn parse_definition_name_drops_parameter_list() {
-        assert_eq!(parse_definition_name("header(title)"), "header");
-        assert_eq!(parse_definition_name("footer"), "footer");
-    }
 
     #[test]
     fn references_finds_reference_only_documents() {
@@ -263,15 +162,5 @@ mod tests {
             "expected reference in page.html, got {:?}",
             locs
         );
-    }
-
-    #[test]
-    fn attribute_classification() {
-        assert!(is_fragment_attr("th:fragment"));
-        assert!(is_fragment_attr("data-th-fragment"));
-        assert!(is_reference_attr("th:insert"));
-        assert!(is_reference_attr("th:replace"));
-        assert!(is_reference_attr("th:include"));
-        assert!(!is_reference_attr("th:fragment"));
     }
 }

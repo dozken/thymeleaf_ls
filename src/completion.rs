@@ -3,11 +3,7 @@
 
 use tower_lsp::lsp_types::*;
 
-use crate::{
-    document::CursorContext,
-    thymeleaf,
-    vault::Vault,
-};
+use crate::{document::CursorContext, thymeleaf, vault::Vault};
 
 /// Produces completion items for the cursor at `position` in `uri`.
 ///
@@ -16,11 +12,7 @@ use crate::{
 /// * In the value of a `th:*` attribute, offers expression-syntax helpers and
 ///   utility objects.
 /// * Everywhere else, returns an empty list.
-pub fn completion(
-    vault: &Vault,
-    uri: &Url,
-    position: Position,
-) -> Vec<CompletionItem> {
+pub fn completion(vault: &Vault, uri: &Url, position: Position) -> Vec<CompletionItem> {
     let Some(doc) = vault.get(uri) else {
         return Vec::new();
     };

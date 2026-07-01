@@ -63,7 +63,13 @@ pub fn semantic_tokens_full(doc: &Document) -> SemanticTokens {
         }
 
         // The attribute name itself -> PROPERTY.
-        push_token(doc, &mut raw, attr.name_range.start, attr.name_range.end, TYPE_PROPERTY);
+        push_token(
+            doc,
+            &mut raw,
+            attr.name_range.start,
+            attr.name_range.end,
+            TYPE_PROPERTY,
+        );
 
         // Expression markers inside the value -> MACRO.
         for (start, end) in expression_spans(&attr.value, attr.value_range.start) {
@@ -213,10 +219,19 @@ mod tests {
         let l = legend();
         assert_eq!(l.token_types.len(), 4);
         assert!(l.token_modifiers.is_empty());
-        assert_eq!(l.token_types[TYPE_PROPERTY as usize], SemanticTokenType::PROPERTY);
+        assert_eq!(
+            l.token_types[TYPE_PROPERTY as usize],
+            SemanticTokenType::PROPERTY
+        );
         assert_eq!(l.token_types[TYPE_MACRO as usize], SemanticTokenType::MACRO);
-        assert_eq!(l.token_types[TYPE_STRING as usize], SemanticTokenType::STRING);
-        assert_eq!(l.token_types[TYPE_VARIABLE as usize], SemanticTokenType::VARIABLE);
+        assert_eq!(
+            l.token_types[TYPE_STRING as usize],
+            SemanticTokenType::STRING
+        );
+        assert_eq!(
+            l.token_types[TYPE_VARIABLE as usize],
+            SemanticTokenType::VARIABLE
+        );
     }
 
     #[test]
@@ -260,7 +275,11 @@ mod tests {
             "<a th:href=\"@{/u}\" th:text=\"${a}\" th:with=\"x=*{b}\" th:alt=\"#{c}\" th:insert=\"~{d}\">z</a>",
         );
         let toks = semantic_tokens_full(&d);
-        let macros = toks.data.iter().filter(|t| t.token_type == TYPE_MACRO).count();
+        let macros = toks
+            .data
+            .iter()
+            .filter(|t| t.token_type == TYPE_MACRO)
+            .count();
         assert_eq!(macros, 5, "one MACRO token per expression marker");
     }
 

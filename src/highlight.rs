@@ -11,15 +11,16 @@
 //!     every occurrence of that same attribute name is highlighted as
 //!     [`DocumentHighlightKind::TEXT`].
 //!
-//! Fragment name parsing mirrors `navigation.rs` (`parse_definition_name` /
-//! `parse_reference_name`) but additionally tracks byte offsets so the precise
-//! name token *inside* the attribute value can be highlighted.
+//! Fragment name recognition and name-token ranges come from the shared
+//! [`crate::fragmentref`] module, so the precise name token *inside* the
+//! attribute value can be highlighted.
 
 use std::ops::Range as ByteRange;
 
 use tower_lsp::lsp_types::*;
 
 use crate::document::{AttrOccurrence, Document};
+use crate::fragmentref;
 
 /// Computes the document highlights for the symbol under `position`.
 ///
@@ -60,10 +61,10 @@ pub fn document_highlight(doc: &Document, position: Position) -> Vec<DocumentHig
 fn fragment_name_under_cursor(attrs: &[AttrOccurrence], offset: usize) -> Option<String> {
     for a in attrs {
         let base = a.value_range.start;
-        let token = if is_fragment_attr(&a.name) {
-            definition_name_range(&a.value)
-        } else if is_reference_attr(&a.name) {
-            reference_name_range(&a.value)
+        let token = if fragmentref::is_fragment_attr(&a.name) {
+            fragmentref::definition_name_range(&a.value)
+        } else if fragmentref::is_reference_attr(&a.name) {
+            fragmentref::reference_name_range(&a.value)
         } else {
             None
         };
@@ -89,8 +90,8 @@ fn fragment_highlights(
     let mut out = Vec::new();
     for a in attrs {
         let base = a.value_range.start;
-        if is_fragment_attr(&a.name) {
-            if let Some(r) = definition_name_range(&a.value) {
+        if fragmentref::is_fragment_attr(&a.name) {
+            if let Some(r) = fragmentref::definition_name_range(&a.value) {
                 if &a.value[r.clone()] == name {
                     out.push(DocumentHighlight {
                         range: to_range(doc, &((base + r.start)..(base + r.end))),
@@ -98,8 +99,8 @@ fn fragment_highlights(
                     });
                 }
             }
-        } else if is_reference_attr(&a.name) {
-            if let Some(r) = reference_name_range(&a.value) {
+        } else if fragmentref::is_reference_attr(&a.name) {
+            if let Some(r) = fragmentref::reference_name_range(&a.value) {
                 if &a.value[r.clone()] == name {
                     out.push(DocumentHighlight {
                         range: to_range(doc, &((base + r.start)..(base + r.end))),
@@ -117,100 +118,6 @@ fn to_range(doc: &Document, r: &ByteRange<usize>) -> Range {
     Range {
         start: doc.position_at(r.start),
         end: doc.position_at(r.end),
-    }
-}
-
-// === Attribute-name classification (mirrors navigation.rs) =================
-
-/// True if `name` denotes a `th:fragment` definition (accepts `data-th-`).
-fn is_fragment_attr(name: &str) -> bool {
-    matches_th_attr(name, "fragment")
-}
-
-/// True if `name` denotes a fragment-reference attribute (`th:insert`,
-/// `th:replace`, `th:include`; accepts the `data-th-` form).
-fn is_reference_attr(name: &str) -> bool {
-    matches_th_attr(name, "insert")
-        || matches_th_attr(name, "replace")
-        || matches_th_attr(name, "include")
-}
-
-/// Case-insensitively matches `name` against `th:<local>` or `data-th-<local>`.
-fn matches_th_attr(name: &str, local: &str) -> bool {
-    let lower = name.trim().to_ascii_lowercase();
-    lower == format!("th:{local}") || lower == format!("data-th-{local}")
-}
-
-// === Value parsing with offset tracking (mirrors navigation.rs) ============
-
-/// Trims ASCII whitespace from both ends of the window `[lo, hi)` of `s`.
-fn trim_window(s: &str, mut lo: usize, mut hi: usize) -> (usize, usize) {
-    let bytes = s.as_bytes();
-    while lo < hi && bytes[lo].is_ascii_whitespace() {
-        lo += 1;
-    }
-    while hi > lo && bytes[hi - 1].is_ascii_whitespace() {
-        hi -= 1;
-    }
-    (lo, hi)
-}
-
-/// Byte range (within `value`) of the name token of a `th:fragment` value,
-/// e.g. `"header(title)"` -> range spanning `header`.
-fn definition_name_range(value: &str) -> Option<ByteRange<usize>> {
-    let (lo, hi) = trim_window(value, 0, value.len());
-    let end = match value[lo..hi].find('(') {
-        Some(idx) => lo + idx,
-        None => hi,
-    };
-    let (lo, hi) = trim_window(value, lo, end);
-    if lo >= hi {
-        None
-    } else {
-        Some(lo..hi)
-    }
-}
-
-/// Byte range (within `value`) of the referenced fragment name token of a
-/// `th:insert`/`th:replace`/`th:include` value. Handles `~{tpl :: name}`,
-/// `tpl :: name`, `:: name`, and bare `name`, stripping any argument list.
-fn reference_name_range(value: &str) -> Option<ByteRange<usize>> {
-    let (mut lo, mut hi) = trim_window(value, 0, value.len());
-
-    // Strip an outer `~{ ... }` fragment-expression wrapper if present.
-    if value[lo..hi].starts_with("~{") {
-        lo += 2;
-        let t = trim_window(value, lo, hi);
-        lo = t.0;
-        hi = t.1;
-        if value[lo..hi].ends_with('}') {
-            hi -= 1;
-        }
-        let t = trim_window(value, lo, hi);
-        lo = t.0;
-        hi = t.1;
-    }
-
-    // The fragment selector is the segment after the last `::`.
-    if let Some(idx) = value[lo..hi].rfind("::") {
-        lo += idx + 2;
-    }
-    let t = trim_window(value, lo, hi);
-    lo = t.0;
-    hi = t.1;
-
-    // Drop a stray trailing `}` and any argument list.
-    if value[lo..hi].ends_with('}') {
-        hi -= 1;
-    }
-    if let Some(idx) = value[lo..hi].find('(') {
-        hi = lo + idx;
-    }
-    let (lo, hi) = trim_window(value, lo, hi);
-    if lo >= hi {
-        None
-    } else {
-        Some(lo..hi)
     }
 }
 
@@ -285,27 +192,5 @@ mod tests {
         let idx = src.find("zz").unwrap();
         let pos = d.position_at(idx);
         assert!(document_highlight(&d, pos).is_empty());
-    }
-
-    #[test]
-    fn definition_name_range_drops_params() {
-        assert_eq!(definition_name_range("header(title)"), Some(0..6));
-        assert_eq!(definition_name_range("  footer "), Some(2..8));
-    }
-
-    #[test]
-    fn reference_name_range_handles_forms() {
-        // `~{tpl :: header('Home')}` -> the `header` segment.
-        let v = "~{fragments :: header('Home')}";
-        let r = reference_name_range(v).unwrap();
-        assert_eq!(&v[r], "header");
-
-        let v = "template :: name";
-        let r = reference_name_range(v).unwrap();
-        assert_eq!(&v[r], "name");
-
-        let v = ":: name";
-        let r = reference_name_range(v).unwrap();
-        assert_eq!(&v[r], "name");
     }
 }

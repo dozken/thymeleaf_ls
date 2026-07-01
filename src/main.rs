@@ -1,7 +1,7 @@
 use structured_logger::{async_json::new_writer, Builder};
 use tokio::sync::RwLock;
 
-use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
+use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
@@ -12,6 +12,7 @@ mod completion;
 mod diagnostics;
 mod document;
 mod folding;
+mod fragmentref;
 mod highlight;
 mod hover;
 mod links;
@@ -44,13 +45,20 @@ impl Backend {
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        let Some(root_uri) = params.root_uri else {
-            return Err(Error::new(ErrorCode::InvalidParams));
-        };
+        // Resolve the workspace root. `root_uri` is deprecated in the LSP spec
+        // in favour of `workspace_folders`; prefer the first folder, fall back
+        // to `root_uri`, and run rootless if the client provides neither (a
+        // missing root must not fail initialization).
+        let root_path = params
+            .workspace_folders
+            .as_ref()
+            .and_then(|folders| folders.first())
+            .map(|folder| folder.uri.clone())
+            .or(params.root_uri)
+            .and_then(|uri| uri.to_file_path().ok());
 
         // Build the vault rooted at the workspace directory and pre-index the
         // workspace HTML so cross-file fragment navigation works immediately.
-        let root_path = root_uri.to_file_path().ok();
         {
             let mut vault = self.vault.write().await;
             *vault = Vault::new(root_path);
@@ -90,12 +98,14 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 })),
                 semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
-                        legend: semantic_tokens::legend(),
-                        full: Some(SemanticTokensFullOptions::Bool(true)),
-                        range: Some(false),
-                        work_done_progress_options: Default::default(),
-                    }),
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: semantic_tokens::legend(),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            range: Some(false),
+                            work_done_progress_options: Default::default(),
+                        },
+                    ),
                 ),
                 ..Default::default()
             },
@@ -352,7 +362,10 @@ mod integration_tests {
         let pos = pos_after(vault.get(&uri).unwrap(), src, "th:t");
 
         let items = completion::completion(&vault, &uri, pos);
-        assert!(!items.is_empty(), "expected completions in attr-name context");
+        assert!(
+            !items.is_empty(),
+            "expected completions in attr-name context"
+        );
         assert!(items.iter().all(|i| i.label.starts_with("th:")));
         assert!(items.iter().any(|i| i.label == "th:text"));
         // items carry docs the editor can render
@@ -416,11 +429,17 @@ mod integration_tests {
         // goto from the reference in page.html resolves to the definition file
         let goto_pos = pos_inside(vault.get(&page_uri).unwrap(), page_src, "header}");
         let defs = navigation::goto(&vault, &page_uri, goto_pos).expect("goto resolves");
-        assert!(defs.iter().any(|l| l.uri == frag_uri), "definition in fragments.html");
+        assert!(
+            defs.iter().any(|l| l.uri == frag_uri),
+            "definition in fragments.html"
+        );
 
         // references from the definition include the reference-only page.html
         let ref_pos = pos_inside(vault.get(&frag_uri).unwrap(), frag_src, "header\"");
         let refs = navigation::references(&vault, &frag_uri, ref_pos);
-        assert!(refs.iter().any(|l| l.uri == page_uri), "usage site found across files");
+        assert!(
+            refs.iter().any(|l| l.uri == page_uri),
+            "usage site found across files"
+        );
     }
 }

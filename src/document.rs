@@ -54,7 +54,11 @@ impl Document {
             (Some(start), Some(end)) => {
                 let start = self.offset_at(start);
                 let end = self.offset_at(end);
-                let (lo, hi) = if start <= end { (start, end) } else { (end, start) };
+                let (lo, hi) = if start <= end {
+                    (start, end)
+                } else {
+                    (end, start)
+                };
                 self.text.replace_range(lo..hi, new_text);
             }
             _ => {
@@ -313,7 +317,8 @@ impl Document {
                     } else {
                         // Empty quotes: value range is just inside the quotes.
                         let r = child.byte_range();
-                        let inner = (r.start + 1).min(r.end)..(r.end.saturating_sub(1)).max(r.start);
+                        let inner =
+                            (r.start + 1).min(r.end)..(r.end.saturating_sub(1)).max(r.start);
                         value_range = Some(inner);
                     }
                 }
@@ -446,7 +451,10 @@ mod tests {
     fn offset_position_roundtrip() {
         let src = "<p>\n  <span>hi</span>\n</p>";
         let d = doc(src);
-        let pos = Position { line: 1, character: 3 };
+        let pos = Position {
+            line: 1,
+            character: 3,
+        };
         let off = d.offset_at(pos);
         assert_eq!(d.position_at(off), pos);
     }
@@ -459,13 +467,25 @@ mod tests {
         let d = doc(src);
         // UTF-16 character index of the 't' in "th:text".
         let byte_idx = src.find("th:text").unwrap();
-        let utf16_char = src[..byte_idx].chars().map(|c| c.len_utf16()).sum::<usize>() as u32;
-        let off = d.offset_at(Position { line: 0, character: utf16_char });
-        assert_eq!(off, byte_idx, "offset_at should map UTF-16 units to byte offset");
+        let utf16_char = src[..byte_idx]
+            .chars()
+            .map(|c| c.len_utf16())
+            .sum::<usize>() as u32;
+        let off = d.offset_at(Position {
+            line: 0,
+            character: utf16_char,
+        });
+        assert_eq!(
+            off, byte_idx,
+            "offset_at should map UTF-16 units to byte offset"
+        );
         // And roundtrip back.
         assert_eq!(
             d.position_at(byte_idx),
-            Position { line: 0, character: utf16_char }
+            Position {
+                line: 0,
+                character: utf16_char
+            }
         );
     }
 

@@ -20,7 +20,7 @@ Modular. `src/main.rs` holds the LSP glue; each feature lives in its own module.
 
 - **Runtime:** `tokio` async, `tower-lsp 0.20` for the LSP protocol layer, `tower_lsp::lsp_types` for LSP messages. `tree-sitter` + `tree-sitter-html` parse the HTML.
 - **Capabilities** advertised in `initialize()`: INCREMENTAL text sync; completion (trigger chars `:` and `"`), hover, definition, references, document/workspace symbols, document highlight, document links, folding, code actions, rename (with prepare), and semantic tokens (full). Handlers are real (no stubs): they read the `Vault` and delegate to the feature modules.
-- **`initialize`** builds a `Vault` rooted at `root_uri` and eagerly indexes workspace `.html` files (`scan_workspace_html`) so cross-file fragment navigation works immediately. `did_open` upserts + publishes diagnostics; `did_change` applies each change via `Vault::apply_change` (incremental, splices the changed byte range then re-parses) + publishes; `did_close` removes the doc and clears its diagnostics.
+- **`initialize`** resolves the workspace root from `workspace_folders` (preferred) or the deprecated `root_uri`, running rootless if neither is present (never fails on a missing root). It builds a `Vault` rooted there and eagerly indexes workspace `.html` files (`scan_workspace_html`) so cross-file fragment navigation works immediately. `did_open` upserts + publishes diagnostics; `did_change` applies each change via `Vault::apply_change` (incremental, splices the changed byte range then re-parses) + publishes; `did_close` removes the doc and clears its diagnostics.
 - **Concurrency:** feature functions are synchronous and pure over `&Vault`/`&Document`; handlers take the `RwLock` read guard, call the function, and only `.await` (e.g. `publish_diagnostics`) after dropping the guard — never hold the lock across `.await`.
 
 Feature modules follow a common shape: a small set of `pub fn`s taking `&Vault`/`&Document` + a `Position`/`Range`, returning `lsp_types` values, each with its own `#[cfg(test)] mod tests`.
@@ -42,8 +42,7 @@ Features:
 - **`code_actions`** — quick fixes for unknown `th:*` attributes: nearest known name by Levenshtein (distance <= 3) and "remove attribute".
 - **`rename`** — `prepare_rename` + `rename`: workspace-wide fragment rename, rewriting only the name token (preserving `(args)` and `~{tpl :: }` wrappers).
 - **`semantic_tokens`** — `legend()` (PROPERTY/MACRO/STRING/VARIABLE) + `semantic_tokens_full`: delta-encoded tokens for `th:*` names and expression markers. `data` is `Vec<SemanticToken>` (structs), not a flat u32 array.
-
-Note: the parser-scaffolding modules re-declare small fragment-name-parsing helpers locally (navigation.rs's are private); keep the four copies in sync if you change the parsing rules.
+- **`fragmentref`** — shared fragment-attribute parsing used by `navigation`, `rename`, and `highlight`: `is_fragment_attr`/`is_reference_attr`, `definition_name_range`/`reference_name_range` (name-token byte range within a value), and the `definition_name`/`reference_name` slice helpers. Change fragment parsing rules here only — the consumers all delegate to this module.
 
 ## Logging & debugging
 

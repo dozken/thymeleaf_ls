@@ -39,8 +39,7 @@ pub fn diagnostics(document: &Document) -> Vec<Diagnostic> {
             Some(_) => {
                 // Known attribute: sanity-check the expression value.
                 if let Some(msg) = unbalanced_message(&attr.value) {
-                    let range =
-                        to_range(document, attr.value_range.start, attr.value_range.end);
+                    let range = to_range(document, attr.value_range.start, attr.value_range.end);
                     out.push(Diagnostic {
                         range,
                         severity: Some(DiagnosticSeverity::ERROR),
@@ -135,10 +134,7 @@ fn unbalanced_message(value: &str) -> Option<String> {
                     Some(open) if open == expected => {}
                     _ => {
                         // Either nothing open, or the wrong opener on top.
-                        return Some(format!(
-                            "Unbalanced expression: unexpected '{}'",
-                            c
-                        ));
+                        return Some(format!("Unbalanced expression: unexpected '{}'", c));
                     }
                 }
             }

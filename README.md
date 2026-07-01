@@ -61,7 +61,7 @@ This is a Language Server Protocol (LSP) implementation for Thymeleaf, a modern 
 
 ## TODO
 
-- [ ] CI/CD
+- [x] CI/CD (GitHub Actions: fmt + clippy + build + test)
 - [x] Tests (unit + integration via `cargo test`)
 - [ ] Trigger completion in element attributes only, e.g. `<div th:_ />`
 - [ ] Negotiate `positionEncoding` (positions are UTF-16 at the LSP boundary)

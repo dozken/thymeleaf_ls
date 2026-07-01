@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use tower_lsp::lsp_types::*;
 
 use crate::document::{AttrOccurrence, Document};
+use crate::fragmentref;
 use crate::vault::Vault;
 
 /// Rename-prepare: if the cursor sits on a fragment name token (inside a
@@ -110,10 +111,10 @@ fn name_token_at(doc: &Document, offset: usize) -> Option<(String, std::ops::Ran
 /// of its name token, if the attribute is a `th:fragment` definition or a
 /// fragment reference (and a name is present).
 fn attr_name_token(attr: &AttrOccurrence) -> Option<(String, std::ops::Range<usize>)> {
-    let span = if is_fragment_attr(&attr.name) {
-        definition_name_span(&attr.value)?
-    } else if is_reference_attr(&attr.name) {
-        reference_name_span(&attr.value)?
+    let span = if fragmentref::is_fragment_attr(&attr.name) {
+        fragmentref::definition_name_range(&attr.value)?
+    } else if fragmentref::is_reference_attr(&attr.name) {
+        fragmentref::reference_name_range(&attr.value)?
     } else {
         return None;
     };
@@ -123,108 +124,6 @@ fn attr_name_token(attr: &AttrOccurrence) -> Option<(String, std::ops::Range<usi
     }
     let abs = (attr.value_range.start + span.start)..(attr.value_range.start + span.end);
     Some((name, abs))
-}
-
-// === Attribute-name classification ========================================
-//
-// Replicated from `navigation.rs` (its helpers are private) so behaviour stays
-// identical without editing that module.
-
-/// True if `name` denotes a `th:fragment` definition (accepts `data-th-`).
-fn is_fragment_attr(name: &str) -> bool {
-    matches_th_attr(name, "fragment")
-}
-
-/// True if `name` denotes a fragment-reference attribute: `th:insert`,
-/// `th:replace`, or `th:include` (accepts the `data-th-` form).
-fn is_reference_attr(name: &str) -> bool {
-    matches_th_attr(name, "insert")
-        || matches_th_attr(name, "replace")
-        || matches_th_attr(name, "include")
-}
-
-/// Case-insensitively matches an attribute name against `th:<local>` or
-/// `data-th-<local>`.
-fn matches_th_attr(name: &str, local: &str) -> bool {
-    let lower = name.trim().to_ascii_lowercase();
-    lower == format!("th:{local}") || lower == format!("data-th-{local}")
-}
-
-// === Name-token span computation ==========================================
-//
-// These mirror `navigation.rs`'s `parse_definition_name` / `parse_reference_name`
-// but return the byte range of the name *within the value string* so the exact
-// token can be rewritten in place.
-
-/// Byte range (within `value`) of the fragment name in a `th:fragment` value,
-/// e.g. `"header(title)"` -> `0..6`. `None` if the name is empty.
-fn definition_name_span(value: &str) -> Option<std::ops::Range<usize>> {
-    let start = value.len() - value.trim_start().len();
-    let after = &value[start..];
-    let name_part = match after.find('(') {
-        Some(idx) => &after[..idx],
-        None => after,
-    };
-    let name = name_part.trim_end();
-    if name.is_empty() {
-        return None;
-    }
-    Some(start..start + name.len())
-}
-
-/// Byte range (within `value`) of the referenced fragment name in a
-/// `th:insert`/`th:replace`/`th:include` value. Handles `~{template :: name}`,
-/// `template :: name`, `:: name`, and bare `name`, stripping any `(args)`.
-/// `None` if the name is empty.
-fn reference_name_span(value: &str) -> Option<std::ops::Range<usize>> {
-    // Maintain a `[lo, hi)` window into `value` mirroring the parse in
-    // `navigation::parse_reference_name`, narrowing it step by step.
-    let mut lo = value.len() - value.trim_start().len();
-    let mut hi = value.trim_end().len();
-    if lo >= hi {
-        return None;
-    }
-
-    // Strip an outer `~{ ... }` wrapper.
-    let s = &value[lo..hi];
-    if let Some(rest) = s.strip_prefix("~{") {
-        lo += 2;
-        lo += rest.len() - rest.trim_start().len();
-        if value[lo..hi].ends_with('}') {
-            hi -= 1;
-        }
-    }
-    trim_window(value, &mut lo, &mut hi);
-
-    // The selector is the segment after the last `::`.
-    if let Some(idx) = value[lo..hi].rfind("::") {
-        lo = lo + idx + 2;
-    }
-    trim_window(value, &mut lo, &mut hi);
-
-    // A trailing `}` may remain if the wrapper suffix wasn't cleanly stripped.
-    if value[lo..hi].ends_with('}') {
-        hi -= 1;
-    }
-
-    // Drop any argument list: `name(args)` -> `name`.
-    if let Some(idx) = value[lo..hi].find('(') {
-        hi = lo + idx;
-    }
-    trim_window(value, &mut lo, &mut hi);
-
-    if lo >= hi {
-        return None;
-    }
-    Some(lo..hi)
-}
-
-/// Shrinks `[lo, hi)` to skip leading/trailing ASCII/Unicode whitespace.
-fn trim_window(value: &str, lo: &mut usize, hi: &mut usize) {
-    let s = &value[*lo..*hi];
-    *lo += s.len() - s.trim_start().len();
-    let s = &value[*lo..*hi];
-    *hi -= s.len() - s.trim_end().len();
 }
 
 #[cfg(test)]
@@ -247,31 +146,6 @@ mod tests {
         let start = text.find(needle).expect("needle present");
         let off = start + needle.len() / 2;
         vault.get(uri).unwrap().position_at(off)
-    }
-
-    #[test]
-    fn definition_name_span_drops_args() {
-        assert_eq!(definition_name_span("header(title)"), Some(0..6));
-        assert_eq!(definition_name_span("  footer "), Some(2..8));
-        assert_eq!(definition_name_span("   "), None);
-    }
-
-    #[test]
-    fn reference_name_span_wrapped() {
-        let v = "~{tpl :: header}";
-        assert_eq!(&v[reference_name_span(v).unwrap()], "header");
-    }
-
-    #[test]
-    fn reference_name_span_various_forms() {
-        let v = "template :: name";
-        assert_eq!(&v[reference_name_span(v).unwrap()], "name");
-        let v = ":: name";
-        assert_eq!(&v[reference_name_span(v).unwrap()], "name");
-        let v = "~{fragments :: header('Home')}";
-        assert_eq!(&v[reference_name_span(v).unwrap()], "header");
-        let v = "bare";
-        assert_eq!(&v[reference_name_span(v).unwrap()], "bare");
     }
 
     #[test]

@@ -215,7 +215,9 @@ mod tests {
         let change = actions
             .iter()
             .find_map(|a| match a {
-                CodeActionOrCommand::CodeAction(ca) if ca.title == "Change to `th:text`" => Some(ca),
+                CodeActionOrCommand::CodeAction(ca) if ca.title == "Change to `th:text`" => {
+                    Some(ca)
+                }
                 _ => None,
             })
             .expect("change action present");
@@ -228,7 +230,11 @@ mod tests {
     fn known_attr_yields_no_actions() {
         let d = doc("<p th:text=\"hi\">Z</p>");
         let actions = code_actions(&d, &uri(), whole(&d));
-        assert!(actions.is_empty(), "unexpected actions: {:?}", titles(&actions));
+        assert!(
+            actions.is_empty(),
+            "unexpected actions: {:?}",
+            titles(&actions)
+        );
     }
 
     #[test]
@@ -251,7 +257,11 @@ mod tests {
             end: d.position_at(z + 1),
         };
         let actions = code_actions(&d, &uri(), range);
-        assert!(actions.is_empty(), "unexpected actions: {:?}", titles(&actions));
+        assert!(
+            actions.is_empty(),
+            "unexpected actions: {:?}",
+            titles(&actions)
+        );
     }
 
     #[test]

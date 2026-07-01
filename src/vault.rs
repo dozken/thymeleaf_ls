@@ -56,12 +56,7 @@ impl Vault {
     /// If the document is unknown, the change is treated as full content and a
     /// new document is created. `start`/`end` are the LSP range bounds of the
     /// edit, or `None`/`None` for a full-document replacement.
-    pub fn apply_change(
-        &mut self,
-        uri: Url,
-        start: Option<Range>,
-        text: String,
-    ) {
+    pub fn apply_change(&mut self, uri: Url, start: Option<Range>, text: String) {
         let (lo, hi) = match start {
             Some(range) => (Some(range.start), Some(range.end)),
             None => (None, None),
@@ -144,10 +139,8 @@ impl Vault {
             if !is_html {
                 continue;
             }
-            if let (Ok(text), Ok(uri)) = (
-                std::fs::read_to_string(path),
-                Url::from_file_path(path),
-            ) {
+            if let (Ok(text), Ok(uri)) = (std::fs::read_to_string(path), Url::from_file_path(path))
+            {
                 self.upsert(uri, text);
             }
         }
