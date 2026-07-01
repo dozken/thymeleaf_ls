@@ -44,6 +44,30 @@ impl Document {
         self.tree = tree;
     }
 
+    /// Applies a single incremental content change and re-parses.
+    ///
+    /// When `range` is `None` the whole document is replaced (a client may send
+    /// a full-content change even under incremental sync). Otherwise the byte
+    /// span covered by `range` is spliced out and replaced with `new_text`.
+    pub fn apply_change(&mut self, range: Option<Position>, end: Option<Position>, new_text: &str) {
+        match (range, end) {
+            (Some(start), Some(end)) => {
+                let start = self.offset_at(start);
+                let end = self.offset_at(end);
+                let (lo, hi) = if start <= end { (start, end) } else { (end, start) };
+                self.text.replace_range(lo..hi, new_text);
+            }
+            _ => {
+                self.text = new_text.to_string();
+            }
+        }
+        let mut parser = new_parser();
+        let tree = parser
+            .parse(&self.text, None)
+            .expect("tree-sitter html parse returned None");
+        self.tree = tree;
+    }
+
     // === Position <-> byte-offset conversions =============================
     //
     // POSITION ENCODING:
@@ -127,6 +151,7 @@ impl Document {
     // === Tree navigation ==================================================
 
     /// Returns the smallest *named* node whose byte range contains `offset`.
+    #[allow(dead_code)]
     pub fn node_at(&self, offset: usize) -> Option<Node<'_>> {
         self.tree
             .root_node()

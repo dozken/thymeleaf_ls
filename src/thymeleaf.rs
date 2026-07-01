@@ -246,11 +246,7 @@ fn normalize(name: &str) -> Option<String> {
     let lower = name.trim().to_ascii_lowercase();
     if let Some(rest) = lower.strip_prefix("th:") {
         Some(format!("th:{}", rest))
-    } else if let Some(rest) = lower.strip_prefix("data-th-") {
-        Some(format!("th:{}", rest))
-    } else {
-        None
-    }
+    } else { lower.strip_prefix("data-th-").map(|rest| format!("th:{}", rest)) }
 }
 
 /// Looks up an attribute by name, accepting both `th:text` and

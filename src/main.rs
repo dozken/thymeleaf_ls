@@ -7,11 +7,18 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use vault::Vault;
 
+mod code_actions;
 mod completion;
 mod diagnostics;
 mod document;
+mod folding;
+mod highlight;
 mod hover;
+mod links;
 mod navigation;
+mod rename;
+mod semantic_tokens;
+mod symbols;
 mod thymeleaf;
 mod vault;
 
@@ -57,7 +64,7 @@ impl LanguageServer for Backend {
             }),
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
+                    TextDocumentSyncKind::INCREMENTAL,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
@@ -69,6 +76,27 @@ impl LanguageServer for Backend {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
+                document_highlight_provider: Some(OneOf::Left(true)),
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: Default::default(),
+                }),
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: Default::default(),
+                })),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
+                        legend: semantic_tokens::legend(),
+                        full: Some(SemanticTokensFullOptions::Bool(true)),
+                        range: Some(false),
+                        work_done_progress_options: Default::default(),
+                    }),
+                ),
                 ..Default::default()
             },
         })
@@ -96,13 +124,13 @@ impl LanguageServer for Backend {
         log::debug!("did_change: {}", params.text_document.uri);
         let uri = params.text_document.uri.clone();
         let version = params.text_document.version;
-        // FULL sync: the last change carries the whole document text.
-        let Some(change) = params.content_changes.into_iter().last() else {
-            return;
-        };
+        // INCREMENTAL sync: apply each change in order. A change with no range
+        // is a full-document replacement.
         {
             let mut vault = self.vault.write().await;
-            vault.upsert(uri.clone(), change.text);
+            for change in params.content_changes {
+                vault.apply_change(uri.clone(), change.range, change.text);
+            }
         }
         self.publish_diagnostics(uri, Some(version)).await;
     }
@@ -154,6 +182,98 @@ impl LanguageServer for Backend {
         let vault = self.vault.read().await;
         let locations = navigation::references(&vault, &uri, position);
         Ok(Some(locations))
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri;
+        let vault = self.vault.read().await;
+        let Some(doc) = vault.get(&uri) else {
+            return Ok(None);
+        };
+        let symbols = symbols::document_symbols(doc, &uri);
+        Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let vault = self.vault.read().await;
+        Ok(Some(symbols::workspace_symbols(&vault, &params.query)))
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+        let vault = self.vault.read().await;
+        let Some(doc) = vault.get(&uri) else {
+            return Ok(None);
+        };
+        Ok(Some(highlight::document_highlight(doc, position)))
+    }
+
+    async fn document_link(&self, params: DocumentLinkParams) -> Result<Option<Vec<DocumentLink>>> {
+        let uri = params.text_document.uri;
+        let vault = self.vault.read().await;
+        let Some(doc) = vault.get(&uri) else {
+            return Ok(None);
+        };
+        Ok(Some(links::document_links(doc)))
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = params.text_document.uri;
+        let vault = self.vault.read().await;
+        let Some(doc) = vault.get(&uri) else {
+            return Ok(None);
+        };
+        Ok(Some(folding::folding_ranges(doc)))
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri;
+        let range = params.range;
+        let vault = self.vault.read().await;
+        let Some(doc) = vault.get(&uri) else {
+            return Ok(None);
+        };
+        Ok(Some(code_actions::code_actions(doc, &uri, range)))
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = params.text_document.uri;
+        let position = params.position;
+        let vault = self.vault.read().await;
+        Ok(rename::prepare_rename(&vault, &uri, position).map(PrepareRenameResponse::Range))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let vault = self.vault.read().await;
+        Ok(rename::rename(&vault, &uri, position, &params.new_name))
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri;
+        let vault = self.vault.read().await;
+        let Some(doc) = vault.get(&uri) else {
+            return Ok(None);
+        };
+        let tokens = semantic_tokens::semantic_tokens_full(doc);
+        Ok(Some(SemanticTokensResult::Tokens(tokens)))
     }
 
     async fn shutdown(&self) -> Result<()> {

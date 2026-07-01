@@ -179,7 +179,8 @@ fn parse_definition_name(value: &str) -> String {
 ///   * `template :: name`
 ///   * `:: name`
 ///   * `name` (bare fragment, no template selector)
-/// and strips any trailing argument list (`name(args)`).
+///
+/// Strips any trailing argument list (`name(args)`).
 fn parse_reference_name(value: &str) -> String {
     // Strip an outer `~{ ... }` fragment-expression wrapper if present.
     let mut s = value.trim();

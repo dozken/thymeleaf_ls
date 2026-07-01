@@ -36,6 +36,7 @@ impl Vault {
     }
 
     /// The workspace root directory, if one was provided.
+    #[allow(dead_code)]
     pub fn root(&self) -> Option<&PathBuf> {
         self.root.as_ref()
     }
@@ -44,6 +45,29 @@ impl Vault {
     pub fn upsert(&mut self, uri: Url, text: String) {
         match self.docs.get_mut(&uri) {
             Some(doc) => doc.update(text),
+            None => {
+                self.docs.insert(uri, Document::new(text));
+            }
+        }
+    }
+
+    /// Applies an incremental content change to the document for `uri`.
+    ///
+    /// If the document is unknown, the change is treated as full content and a
+    /// new document is created. `start`/`end` are the LSP range bounds of the
+    /// edit, or `None`/`None` for a full-document replacement.
+    pub fn apply_change(
+        &mut self,
+        uri: Url,
+        start: Option<Range>,
+        text: String,
+    ) {
+        let (lo, hi) = match start {
+            Some(range) => (Some(range.start), Some(range.end)),
+            None => (None, None),
+        };
+        match self.docs.get_mut(&uri) {
+            Some(doc) => doc.apply_change(lo, hi, &text),
             None => {
                 self.docs.insert(uri, Document::new(text));
             }

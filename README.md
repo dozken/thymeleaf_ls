@@ -46,20 +46,23 @@ This is a Language Server Protocol (LSP) implementation for Thymeleaf, a modern 
 
 ## Features
 
-- [x] **Code Completion:** Get intelligent code completion suggestions for Thymeleaf attributes and expressions as you type.
-    - [x] Trigger on `:`
-    - [x] Context-aware: attribute names offered in start tags, expression syntaxes offered inside `th:*` values
-    - [x] Filters the Standard Dialect catalog by the partial name being typed
-- [x] **Documentation:** Access documentation and tooltips (hover) for Thymeleaf attributes and expression syntaxes right in your editor.
-- [x] **Navigation:** Jump to fragment definitions (goto-definition) and list fragment references across the workspace.
-- [ ] **Syntax Highlighting:** Enjoy syntax highlighting for Thymeleaf expressions and tags in your IDE or text editor.
-- [x] **Error Checking:** Real-time diagnostics — flags unknown `th:*` attributes and clearly unbalanced expression brackets.
+- [x] **Code Completion:** Context-aware suggestions — attribute names in start tags, expression syntaxes inside `th:*` values; filters the Standard Dialect catalog by the partial name typed; triggers on `:`.
+- [x] **Documentation:** Hover docs for Thymeleaf attributes and expression syntaxes.
+- [x] **Navigation:** Goto-definition and find-references for fragments across the workspace.
+- [x] **Error Checking:** Real-time diagnostics — unknown `th:*` attributes and clearly unbalanced expression brackets.
+- [x] **Syntax Highlighting:** Semantic tokens for `th:*` attribute names and expression markers.
+- [x] **Document Symbols / Outline:** Fragments and `id` elements; plus workspace symbol search.
+- [x] **Document Highlight:** Highlights all occurrences of the fragment/attribute under the cursor.
+- [x] **Folding:** Element, `<script>`/`<style>`, and comment folding ranges.
+- [x] **Document Links:** Clickable `@{...}` link expressions and concrete `href`/`src` URLs.
+- [x] **Code Actions:** Quick fixes for unknown `th:*` attributes (nearest-match suggestion, remove attribute).
+- [x] **Rename:** Fragment rename (with prepare-rename) across all workspace files.
+- [x] **Incremental Sync:** `TextDocumentSyncKind::INCREMENTAL`.
 
 ## TODO
 
 - [ ] CI/CD
-- [x] Tests (unit tests via `cargo test`)
+- [x] Tests (unit + integration via `cargo test`)
 - [ ] Trigger completion in element attributes only, e.g. `<div th:_ />`
-- [ ] UTF-16 position encoding (currently byte offsets; off for multi-byte lines)
-- [ ] Syntax highlighting
+- [ ] Negotiate `positionEncoding` (positions are UTF-16 at the LSP boundary)
 - [ ] Sample of features
